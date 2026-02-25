@@ -1,0 +1,101 @@
+{
+  "name": "virela-desktop",
+  "version": "1.0.0",
+  "description": "Virela Desktop Application",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "concurrently -k \"npm run dev:vite\" \"npm run dev:electron\"",
+    "dev:vite": "cd ../tooth-chart-hub && npm run dev",
+    "dev:electron": "wait-on http://localhost:8080 && cross-env NODE_ENV=development electron .",
+    "dev:electron-only": "cross-env NODE_ENV=development electron .",
+    "build": "electron-builder",
+    "build:win": "npm run build:win:full",
+    "build:win:full": "cd ../tooth-chart-hub && npm run build && cd ../electron && electron-builder --win",
+    "build:win:portable": "electron-builder --win portable",
+    "build:win:nsis": "electron-builder --win nsis",
+    "dist": "npm run build",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "keywords": [
+    "electron",
+    "dental",
+    "practice-management"
+  ],
+  "author": "Virela",
+  "license": "PROPRIETARY",
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "cross-env": "^7.0.3",
+    "electron": "^32.0.0",
+    "electron-builder": "^25.1.8",
+    "wait-on": "^8.0.5"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^12.6.2",
+    "electron-log": "^5.4.3",
+    "electron-updater": "^6.1.7",
+    "exceljs": "^4.4.0",
+    "fs-extra": "^11.3.3",
+    "jsonwebtoken": "^9.0.3",
+    "uuid": "^13.0.0",
+    "validator": "^13.15.26"
+  },
+  "build": {
+    "appId": "com.virela.desktop",
+    "productName": "Virela",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "ipcHandlers.js",
+      "license.html",
+      "modules/**/*",
+      "services/**/*",
+      "utils/**/*",
+      "frontend/dist/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/default-images",
+        "to": "default-images",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "asarUnpack": [
+      "node_modules/better-sqlite3/**"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "signingHashAlgorithms": [
+        "sha256"
+      ],
+      "publisherName": "Virela"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Virela"
+    },
+    "publish": {
+      "provider": "generic",
+      "url": "https://updates.example.com"
+    }
+  }
+}

@@ -1,0 +1,61 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: virela-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-virela}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: ${POSTGRES_DB:-virela}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Schema + migrations applied in order on first boot
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./db/migrations/001_add_license_keys_table.sql:/docker-entrypoint-initdb.d/02-migration-001.sql:ro
+      - ./db/migrations/002_add_app_versions_table.sql:/docker-entrypoint-initdb.d/03-migration-002.sql:ro
+      - ./db/migrations/003_add_backup_columns.sql:/docker-entrypoint-initdb.d/04-migration-003.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-virela} -d ${POSTGRES_DB:-virela}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: virela-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-virela}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-virela}
+    ports:
+      - "4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - backup_storage:/app/storage/backups
+
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: virela-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  backup_storage:

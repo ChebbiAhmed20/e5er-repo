@@ -1,0 +1,45 @@
+# Electron Builder Configuration
+# This file can be used as an alternative to package.json "build" section
+
+appId: com.virela.desktop
+productName: Virela
+copyright: Copyright © 2026 Virela
+
+directories:
+  output: dist
+  buildResources: build
+
+files:
+  - main.js
+  - preload.js
+  - modules/**/*
+  - ../tooth-chart-hub/dist/**/*
+
+extraResources:
+  - from: ../tooth-chart-hub/dist
+    to: app
+    filter:
+      - "**/*"
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.ico
+  signingHashAlgorithms:
+    - sha256
+  publisherName: Virela
+  # Optional: set CERT_FILE and CERT_PASSWORD env vars to enable code signing
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Virela
+
+publish:
+  provider: generic
+  url: https://updates.example.com
+  # Override with UPDATE_SERVER_URL env var when publishing to your update server
