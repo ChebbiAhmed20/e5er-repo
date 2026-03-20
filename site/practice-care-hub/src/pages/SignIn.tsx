@@ -44,7 +44,10 @@ const SignIn = () => {
       const searchParams = new URLSearchParams(window.location.search);
       if (searchParams.get('from') === 'virela-app') {
         const token = tokens.accessToken;
+        // Fire deep link to Electron
         window.location.href = `virela-app://auth?token=${token}`;
+        // Also navigate to dashboard so user isn't stuck on signin
+        setTimeout(() => navigate("/dashboard"), 500);
         return;
       }
 

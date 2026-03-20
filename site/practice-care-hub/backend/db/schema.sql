@@ -95,33 +95,3 @@ CREATE INDEX IF NOT EXISTS idx_refresh_tokens_expires_at ON refresh_tokens(expir
 CREATE INDEX IF NOT EXISTS idx_system_logs_dentist_created ON system_logs(dentist_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_system_logs_level_created ON system_logs(level, created_at DESC);
 
-INSERT INTO users (id, email, password_hash, role)
-VALUES
-  ('11111111-1111-1111-1111-111111111111', 'amine@clinique-sourire.tn', '$2a$12$0xEgx24yv9N.6vBR7Vwv7ObuJ22ut7fFQK6KrQicSR7A2yWfBiQzS', 'dentist')
-ON CONFLICT (email) DO NOTHING;
-
-INSERT INTO dentists (id, user_id, first_name, last_name, name_arabic, cin, city, phone, clinic_name)
-VALUES
-  ('22222222-2222-2222-2222-222222222222', '11111111-1111-1111-1111-111111111111', 'Amine', 'Ben Salah', 'أمين بن صالح', '09876543', 'Tunis', '+216 98 765 432', 'Clinique du Sourire')
-ON CONFLICT (cin) DO NOTHING;
-
-INSERT INTO licenses (dentist_id, status, type, activated_at, expires_at)
-VALUES
-  ('22222222-2222-2222-2222-222222222222', 'trial', 'trial', NOW() - INTERVAL '3 days', NOW() + INTERVAL '11 days');
-
-INSERT INTO backups (dentist_id, file_name, backup_size_mb, patients_count, treatments_count, backuped_at)
-VALUES
-  ('22222222-2222-2222-2222-222222222222', 'virela_backup_2026-02-23.vbk', 48.30, 347, 1205, NOW() - INTERVAL '1 day'),
-  ('22222222-2222-2222-2222-222222222222', 'virela_backup_2026-02-20.vbk', 46.90, 338, 1174, NOW() - INTERVAL '4 days');
-
-INSERT INTO reminders (dentist_id, patient_name, channel, status, scheduled_at, sent_at)
-VALUES
-  ('22222222-2222-2222-2222-222222222222', 'Patient 001', 'sms', 'sent', NOW() - INTERVAL '2 days', NOW() - INTERVAL '2 days'),
-  ('22222222-2222-2222-2222-222222222222', 'Patient 002', 'sms', 'sent', NOW() - INTERVAL '1 day', NOW() - INTERVAL '1 day'),
-  ('22222222-2222-2222-2222-222222222222', 'Patient 003', 'email', 'failed', NOW() - INTERVAL '1 day', NULL),
-  ('22222222-2222-2222-2222-222222222222', 'Patient 004', 'whatsapp', 'queued', NOW() + INTERVAL '2 hours', NULL);
-
-INSERT INTO system_logs (dentist_id, level, event_type, message, metadata)
-VALUES
-  ('22222222-2222-2222-2222-222222222222', 'info', 'auth.signin', 'Dentist signed in', '{"ip":"127.0.0.1"}'::jsonb),
-  ('22222222-2222-2222-2222-222222222222', 'info', 'backup.created', 'Backup completed', '{"file":"virela_backup_2026-02-23.vbk"}'::jsonb);

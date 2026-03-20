@@ -128,3 +128,29 @@ export async function grantLicense(dentistId: string): Promise<{ success: boolea
     body: JSON.stringify({ dentistId }),
   }, true);
 }
+
+/* ── Backups ────────────────────────────────────────────── */
+
+export interface BackupRecord {
+  id: string;
+  fileName: string;
+  date: string;
+  size: string;
+  patients: number;
+  treatments: number;
+}
+
+export async function getLatestBackup(): Promise<BackupRecord | null> {
+  try {
+    return await apiFetch<BackupRecord>("/backups/latest");
+  } catch {
+    return null;
+  }
+}
+
+export async function importBackup(backupId: string): Promise<{ success: boolean; restoredPatients: number; restoredTreatments: number }> {
+  return await apiFetch("/backups/import", {
+    method: "POST",
+    body: JSON.stringify({ backupId }),
+  });
+}

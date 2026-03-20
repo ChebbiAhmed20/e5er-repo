@@ -10,7 +10,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
-import { getDashboard } from "@/services/api";
+import { getDashboard, getLatestBackup, importBackup } from "@/services/api";
+import type { BackupRecord } from "@/services/api";
 import { toast } from "@/hooks/use-toast";
 import type { DashboardData } from "@/types/dentist";
 
@@ -21,41 +22,27 @@ const STATUS_MAP: Record<string, { label: string; color: string }> = {
   pending: { label: "En attente", color: "bg-muted text-muted-foreground" },
 };
 
-/* ── Mock backup data ───────────────────────────────────── */
-const MOCK_BACKUP = {
-  fileName: "virela_backup_2026-02-23.vbk",
-  date: "2026-02-23T22:15:00Z",
-  size: "48.3 Mo",
-  patients: 347,
-  treatments: 1205,
-};
-
 const Dashboard = () => {
   const { isAuthenticated, profile: authProfile, logout } = useAuth();
   const navigate = useNavigate();
   const [data, setData] = useState<DashboardData | null>(null);
+  const [backup, setBackup] = useState<BackupRecord | null>(null);
   const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) { navigate("/signin"); return; }
     getDashboard().then(setData);
+    getLatestBackup().then(setBackup);
   }, [isAuthenticated, navigate]);
 
-  /**
-   * Import latest backup
-   * Endpoint: POST /api/backup/import
-   * Body: { backupId: string }
-   * Response: { success: boolean, restoredPatients: number, restoredTreatments: number }
-   */
   const handleImportBackup = async () => {
+    if (!backup) return;
     setImporting(true);
     try {
-      // TODO: Replace with real API call
-      // await fetch(`${API_BASE}/backup/import`, { method: "POST", body: JSON.stringify({ backupId: MOCK_BACKUP.fileName }) });
-      await new Promise((r) => setTimeout(r, 1500));
+      const result = await importBackup(backup.id);
       toast({
         title: "Sauvegarde importée avec succès",
-        description: `${MOCK_BACKUP.patients} patients et ${MOCK_BACKUP.treatments} traitements restaurés.`,
+        description: `${result.restoredPatients} patients et ${result.restoredTreatments} traitements restaurés.`,
       });
     } catch {
       toast({ title: "Erreur d'importation", description: "Impossible d'importer la sauvegarde.", variant: "destructive" });
@@ -91,12 +78,24 @@ const Dashboard = () => {
             <Button
               className="bg-accent text-accent-foreground hover:bg-accent/90"
               size="sm"
-              onClick={() => {
+              onClick={async () => {
                 const token = localStorage.getItem("virela_access_token");
-                if (token) {
-                  window.location.href = `virela-app://auth?token=${token}`;
-                } else {
+                if (!token) {
                   toast({ title: "Erreur", description: "Veuillez vous reconnecter.", variant: "destructive" });
+                  return;
+                }
+                
+                // Try local dev server first, fall back to deep link
+                try {
+                  await fetch('http://127.0.0.1:45678/deep-link', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: `virela-app://auth?token=${token}` }),
+                  });
+                  toast({ title: "Synchronisation en cours..." });
+                } catch {
+                  // Fall back to deep link (works in production)
+                  window.location.href = `virela-app://auth?token=${token}`;
                 }
               }}
             >
@@ -193,50 +192,59 @@ const Dashboard = () => {
 
           {/* Latest Backup */}
           <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-            <Card>
-              <CardHeader className="pb-4">
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <FileArchive className="w-5 h-5 text-primary" /> Dernière Sauvegarde
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-3 text-sm">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">Date :</span>
-                    <span className="text-foreground font-medium">{fmtDate(MOCK_BACKUP.date)} à {fmtTime(MOCK_BACKUP.date)}</span>
+            {backup ? (
+              <Card>
+                <CardHeader className="pb-4">
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <FileArchive className="w-5 h-5 text-primary" /> Dernière Sauvegarde
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-3 text-sm">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-muted-foreground">Date :</span>
+                      <span className="text-foreground font-medium">{fmtDate(backup.date)} à {fmtTime(backup.date)}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <HardDrive className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-muted-foreground">Taille :</span>
+                      <span className="text-foreground font-medium">{backup.size}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <User className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-muted-foreground">Patients :</span>
+                      <span className="text-foreground font-medium">{backup.patients}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-muted-foreground">Traitements :</span>
+                      <span className="text-foreground font-medium">{backup.treatments}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <HardDrive className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">Taille :</span>
-                    <span className="text-foreground font-medium">{MOCK_BACKUP.size}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <User className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">Patients :</span>
-                    <span className="text-foreground font-medium">{MOCK_BACKUP.patients}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">Traitements :</span>
-                    <span className="text-foreground font-medium">{MOCK_BACKUP.treatments}</span>
-                  </div>
-                </div>
-                <p className="text-[10px] text-muted-foreground font-mono bg-muted/50 px-2 py-1 rounded">
-                  Endpoint : POST /api/backup/import
-                </p>
-                {/* Import button — calls POST /api/backup/import */}
-                <Button
-                  size="sm"
-                  className="w-full bg-hero-gradient text-primary-foreground"
-                  onClick={handleImportBackup}
-                  disabled={importing}
-                >
-                  <Upload className="w-4 h-4 mr-1" />
-                  {importing ? "Importation en cours..." : "Importer cette Sauvegarde"}
-                </Button>
-              </CardContent>
-            </Card>
+                  <Button
+                    size="sm"
+                    className="w-full bg-hero-gradient text-primary-foreground"
+                    onClick={handleImportBackup}
+                    disabled={importing}
+                  >
+                    <Upload className="w-4 h-4 mr-1" />
+                    {importing ? "Importation en cours..." : "Importer cette Sauvegarde"}
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <CardHeader className="pb-4">
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <FileArchive className="w-5 h-5 text-primary" /> Dernière Sauvegarde
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="py-6 text-center text-muted-foreground text-sm">
+                  Aucune sauvegarde disponible
+                </CardContent>
+              </Card>
+            )}
           </motion.div>
 
           {/* Reminders */}

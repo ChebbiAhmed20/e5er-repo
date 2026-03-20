@@ -12,7 +12,6 @@ export function isElectron(): boolean {
  * Sync so it can be used directly in img src.
  */
 export function getImageUrl(imagePath: string | null | undefined): string {
-  console.log('getImageUrl input:', imagePath); // ADD THIS
   if (!imagePath) return '';
   if (imagePath.startsWith('http') || imagePath.startsWith('virela:')) return imagePath;
   const normalized = imagePath.replace(/\\/g, '/').replace(/^\/+/, '').replace(/^uploads\//, '');
@@ -23,7 +22,6 @@ export function getImageUrl(imagePath: string | null | undefined): string {
     } catch (e) {
       // ignore logging failures
     }
-    console.log('getImageUrl output:', relative ? `virela://images/${relative}` : ''); // ADD THIS
     return relative ? `virela://images/${relative}` : '';
   }
   const webPath = imagePath.startsWith('/') ? imagePath : `/uploads/${normalized}`;

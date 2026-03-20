@@ -4,11 +4,8 @@ const { query, beginTransaction, commitTransaction, rollbackTransaction } = requ
 const { generateUUID, generateReferralCode } = require('../utils/uuid');
 const { app } = require('electron');
 
-// Secrets should ideally be loaded from a secure store or .env
-// For a desktop app, we might store these in a safe config or bake them in if it's a standalone app
-// defaulting to development secrets if env not set
-const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_key_change_in_prod';
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'dev_refresh_secret_key_change_in_prod';
+// Use baked-in production-safe config (no .env dependency in packaged builds).
+const { JWT_SECRET, JWT_REFRESH_SECRET } = require('../modules/config');
 
 const SALT_ROUNDS = 10;
 

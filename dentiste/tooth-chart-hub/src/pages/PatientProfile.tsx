@@ -293,7 +293,17 @@ const PatientProfile = () => {
           patientId={patient.id}
           toothNumber={selectedToothForDialog}
           open={dialogOpen}
-          onOpenChange={setDialogOpen}
+          onOpenChange={(open) => {
+            setDialogOpen(open);
+            // If dialog is closing, deselect the tooth
+            if (!open && selectedToothForDialog !== null) {
+              setSelectedTeeth((prev) => {
+                const next = new Set(prev);
+                next.delete(String(selectedToothForDialog));
+                return next;
+              });
+            }
+          }}
           onTreatmentAdded={handleTreatmentAdded}
         />
 

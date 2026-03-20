@@ -18,7 +18,7 @@ const Landing = () => {
       <div className="max-w-md w-full text-center space-y-8">
         <div className="flex flex-col items-center gap-4">
           <img
-            src="/logo-icon.svg"
+            src="./logo-icon.svg"
             alt="Virela logo"
             className="w-24 h-24 rounded-2xl shadow-lg"
           />
@@ -35,7 +35,7 @@ const Landing = () => {
             onClick={handleConnect}
           >
             <LogIn className="w-6 h-6" />
-            Connecte-vous a votre compte
+            Connectez-vous a votre compte
           </Button>
 
           <p className="text-xs text-muted-foreground">

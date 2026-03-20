@@ -5,6 +5,11 @@
  * Handles window management, IPC, auto-updates, licensing, and local storage.
  */
 
+// Only load dotenv in dev. In production, packaged builds should not depend on a .env file
+// (since it may not be included).
+if (process.env.NODE_ENV === 'development') {
+  require('dotenv').config();
+}
 const { app, BrowserWindow, ipcMain, dialog, shell, session, protocol } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
@@ -77,6 +82,136 @@ let backendProcess = null;
 let backendStarted = false;
 
 /**
+ * If a deep link arrives before the main window exists (cold start on Windows),
+ * we queue the URL and send the token after the window finishes loading.
+ */
+let pendingDeepLinkUrl = null;
+
+/**
+ * Handle deep link URLs (e.g., virela-app://auth?token=...)
+ * Must be defined before single-instance / protocol registration.
+ */
+function handleDeepLink(url) {
+  log.info('[deep-link] Received URL:', url);
+  try {
+    const parsedUrl = new URL(url);
+    if (parsedUrl.hostname === 'auth' || parsedUrl.pathname.includes('/auth')) {
+      const token = parsedUrl.searchParams.get('token');
+      if (!token) {
+        log.warn('[deep-link] No token in URL');
+        return;
+      }
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        // Avoid sending before renderer has loaded (race on cold start / second-instance).
+        if (mainWindow.webContents.isLoading()) {
+          log.info('[deep-link] Window still loading; queueing URL until did-finish-load');
+          pendingDeepLinkUrl = url;
+        } else {
+          mainWindow.webContents.send('auth:deep-link-token', token);
+        }
+      } else {
+        log.info('[deep-link] mainWindow not ready; queueing URL for later');
+        pendingDeepLinkUrl = url;
+      }
+    }
+  } catch (err) {
+    log.error('[deep-link] Failed to parse URL:', err);
+  }
+}
+
+function flushPendingDeepLink() {
+  if (!pendingDeepLinkUrl) return;
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const url = pendingDeepLinkUrl;
+  pendingDeepLinkUrl = null;
+  log.info('[deep-link] Flushing pending URL after window ready');
+  handleDeepLink(url);
+}
+
+/**
+ * CRITICAL (Windows): requestSingleInstanceLock() must run BEFORE any app.whenReady()
+ * or other app lifecycle registration. Otherwise the running dev instance never receives
+ * second-instance when Chrome opens virela-app://...
+ */
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+  process.exit(0);
+}
+
+// Dev mode fallback: local HTTP server to receive deep link token
+// because second-instance is unreliable when launched via concurrently/npm
+const http = require('http');
+let tokenServer = null;
+
+if (isDev) {
+  tokenServer = http.createServer((req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    
+    if (req.method === 'OPTIONS') {
+      res.writeHead(200);
+      res.end();
+      return;
+    }
+
+    if (req.method === 'POST' && req.url === '/deep-link') {
+      let body = '';
+      req.on('data', chunk => body += chunk);
+      req.on('end', () => {
+        try {
+          const { url } = JSON.parse(body);
+          log.info('[token-server] Received deep link:', url);
+          if (url) handleDeepLink(url);
+          res.writeHead(200);
+          res.end('ok');
+        } catch (e) {
+          res.writeHead(400);
+          res.end('bad request');
+        }
+      });
+    } else {
+      res.writeHead(404);
+      res.end();
+    }
+  });
+
+  tokenServer.listen(45678, '127.0.0.1', () => {
+    log.info('[token-server] Listening on port 45678');
+  });
+}
+
+// Register custom protocol handler + deep link delivery on the primary instance only
+if (isDev) {
+  const mainScript = path.resolve(__dirname, 'main.js');
+  log.info('[protocol] Registering virela-app with:', process.execPath, mainScript);
+  app.setAsDefaultProtocolClient('virela-app', process.execPath, [mainScript]);
+} else if (!app.isDefaultProtocolClient('virela-app')) {
+  app.setAsDefaultProtocolClient('virela-app');
+}
+
+app.on('second-instance', (event, commandLine, workingDirectory) => {
+  log.info('[second-instance] fired, commandLine:', commandLine, 'cwd:', workingDirectory);
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  }
+  const url = commandLine.find(
+    (arg) => typeof arg === 'string' && arg.startsWith('virela-app://')
+  );
+  log.info('[second-instance] found URL:', url);
+  if (url) handleDeepLink(url);
+});
+
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  if (url.startsWith('virela-app://')) {
+    handleDeepLink(url);
+  }
+});
+
+/**
  * Create the main application window with security hardening.
  * Dev: load from Vite dev server (localhost:8080).
  * Production: load from packaged static files (index.html next to main.js in asar or unpacked app).
@@ -124,6 +259,10 @@ function createMainWindow() {
     if (isDev) {
       mainWindow.focus();
     }
+  });
+
+  mainWindow.webContents.once('did-finish-load', () => {
+    flushPendingDeepLink();
   });
 
   // Prevent navigation to external sites (allow file:// and virela:// for images)
@@ -606,7 +745,8 @@ app.whenReady().then(async () => {
       log.info('[main] Running database integrity check...');
       const dbInstance = database.initialize();
       const integrity = dbInstance.pragma('integrity_check');
-      if (integrity !== 'ok') {
+      const integrityResult = Array.isArray(integrity) ? integrity[0]?.integrity_check : integrity;
+      if (integrityResult !== 'ok') {
         log.error('[main] Database integrity check FAILED:', integrity);
         dialog.showErrorBox(
           'Erreur de base de données',
@@ -637,6 +777,15 @@ app.whenReady().then(async () => {
       // If licensing fails completely, be conservative and show the license window
       // so the user is clearly blocked until the issue is resolved.
       createLicenseWindow();
+    }
+
+    // Windows cold start: Chrome may launch the app with the deep link in process.argv
+    const startupUrl = process.argv.find(
+      (arg) => typeof arg === 'string' && arg.startsWith('virela-app://')
+    );
+    if (startupUrl) {
+      log.info('[deep-link] Cold start argv URL:', startupUrl);
+      handleDeepLink(startupUrl);
     }
   }
 });
@@ -681,70 +830,3 @@ app.on('activate', async () => {
     createLicenseWindow();
   }
 });
-
-// Prevent multiple instances
-const gotTheLock = app.requestSingleInstanceLock();
-
-if (!gotTheLock) {
-  app.quit();
-} else {
-  // Register as default protocol client
-  // In development, we need to provide the path to the main script as an argument
-  if (isDev) {
-    if (process.argv.length >= 2) {
-      app.setAsDefaultProtocolClient('virela-app', process.execPath, [path.resolve(process.argv[1])]);
-    }
-  } else {
-    if (!app.isDefaultProtocolClient('virela-app')) {
-      app.setAsDefaultProtocolClient('virela-app');
-    }
-  }
-
-  app.on('second-instance', (event, commandLine) => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
-    }
-
-    // Windows deep link handling
-    const url = commandLine.find(arg => arg.startsWith('virela-app://'));
-    if (url) {
-      handleDeepLink(url);
-    }
-  });
-
-  // Handle URL opened (macOS)
-  app.on('open-url', (event, url) => {
-    event.preventDefault();
-    if (url.startsWith('virela-app://')) {
-      handleDeepLink(url);
-    }
-  });
-
-  app.whenReady().then(() => {
-    // Initial deep link for Windows (if opened via protocol)
-    const url = process.argv.find(arg => arg.startsWith('virela-app://'));
-    if (url) {
-      handleDeepLink(url);
-    }
-  });
-}
-
-/**
- * Handle deep link URLs (e.g., virela-app://auth?token=...)
- */
-function handleDeepLink(url) {
-  log.info('[deep-link] Received URL:', url);
-  try {
-    const parsedUrl = new URL(url);
-    if (parsedUrl.hostname === 'auth' || parsedUrl.pathname.includes('/auth')) {
-      const token = parsedUrl.searchParams.get('token');
-      if (token && mainWindow) {
-        mainWindow.webContents.send('auth:deep-link-token', token);
-      }
-    }
-  } catch (err) {
-    log.error('[deep-link] Failed to parse URL:', err);
-  }
-}
-
