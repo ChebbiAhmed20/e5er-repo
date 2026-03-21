@@ -60,8 +60,26 @@ const Dashboard = () => {
   const { license, system, reminders } = data;
   const profile = authProfile ?? data.profile;
   const status = STATUS_MAP[license.status];
-  const fmtDate = (d: string) => new Date(d).toLocaleDateString("fr-TN", { day: "numeric", month: "long", year: "numeric" });
-  const fmtTime = (d: string) => new Date(d).toLocaleTimeString("fr-TN", { hour: "2-digit", minute: "2-digit" });
+  const isMeaningfulDate = (value?: string | null) => {
+    if (!value) return false;
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return false;
+    // Suppress epoch/default placeholders like 1970-01-01.
+    return parsed.getFullYear() > 1971;
+  };
+  const fmtDate = (d?: string | null) =>
+    isMeaningfulDate(d)
+      ? new Date(d as string).toLocaleDateString("fr-TN", { day: "numeric", month: "long", year: "numeric" })
+      : "Aucune";
+  const fmtTime = (d?: string | null) =>
+    isMeaningfulDate(d)
+      ? new Date(d as string).toLocaleTimeString("fr-TN", { hour: "2-digit", minute: "2-digit" })
+      : "--:--";
+  const latestBackupDate = isMeaningfulDate(backup?.date)
+    ? backup?.date
+    : isMeaningfulDate(system.lastBackupDate)
+      ? system.lastBackupDate
+      : null;
 
   return (
     <div className="py-10 bg-background min-h-[80vh]">
@@ -176,11 +194,15 @@ const Dashboard = () => {
               <CardContent className="space-y-3 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Dernière sauvegarde</span>
-                  <span className="text-foreground font-medium">{fmtDate(system.lastBackupDate)}</span>
+                  <span className="text-foreground font-medium">
+                    {latestBackupDate ? fmtDate(latestBackupDate) : "Aucune sauvegarde"}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Dernière mise à jour</span>
-                  <span className="text-foreground font-medium">{fmtDate(system.lastUpdateDate)}</span>
+                  <span className="text-foreground font-medium">
+                    {isMeaningfulDate(system.lastUpdateDate) ? fmtDate(system.lastUpdateDate) : "Non disponible"}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Version</span>

@@ -23,7 +23,7 @@ export function AppLayout() {
         }
       } catch (error) {
         console.error('Session check failed:', error);
-        navigate("/auth");
+        navigate("/");
       } finally {
         setLoading(false);
       }
@@ -40,7 +40,7 @@ export function AppLayout() {
     // MODIFIED: Sign out using new API client
     await apiClient.signOut();
     toast.success("Deconnexion reussie");
-    navigate("/auth");
+    navigate("/");
   };
 
   if (loading) {

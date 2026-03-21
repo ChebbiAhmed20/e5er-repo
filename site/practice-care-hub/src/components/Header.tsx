@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Menu, X, UserPlus } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useAuth } from "@/contexts/AuthContext";
 
 const navLinks = [
   { label: "Accueil", to: "/" },
@@ -15,6 +16,9 @@ const navLinks = [
 const Header = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
+  const { isAuthenticated } = useAuth();
+  const hasSessionToken = typeof window !== "undefined" && !!localStorage.getItem("virela_access_token");
+  const isLoggedIn = isAuthenticated || hasSessionToken;
 
   const scrollToFeatures = (e: React.MouseEvent, to: string) => {
     if (to === "/#features" && location.pathname === "/") {
@@ -49,15 +53,23 @@ const Header = () => {
         </nav>
 
         <div className="hidden md:flex items-center gap-3">
-          <Button variant="outline" size="sm" asChild>
-            <Link to="/signin">Se Connecter</Link>
-          </Button>
-          <Button size="sm" className="bg-hero-gradient text-primary-foreground" asChild>
-            <Link to="/signup">
-              <UserPlus className="w-4 h-4 mr-1" />
-              S'inscrire
-            </Link>
-          </Button>
+          {isLoggedIn ? (
+            <Button size="sm" className="bg-hero-gradient text-primary-foreground" asChild>
+              <Link to="/dashboard">Mon Tableau de bord</Link>
+            </Button>
+          ) : (
+            <>
+              <Button variant="outline" size="sm" asChild>
+                <Link to="/signin">Se Connecter</Link>
+              </Button>
+              <Button size="sm" className="bg-hero-gradient text-primary-foreground" asChild>
+                <Link to="/signup">
+                  <UserPlus className="w-4 h-4 mr-1" />
+                  S'inscrire
+                </Link>
+              </Button>
+            </>
+          )}
         </div>
 
         {/* Mobile toggle */}
@@ -90,14 +102,24 @@ const Header = () => {
                 </Link>
               ))}
               <div className="flex flex-col gap-2 pt-2">
-                <Button variant="outline" size="sm" asChild>
-                  <Link to="/signin" onClick={() => setMobileOpen(false)}>Se Connecter</Link>
-                </Button>
-                <Button size="sm" className="bg-hero-gradient text-primary-foreground" asChild>
-                  <Link to="/signup" onClick={() => setMobileOpen(false)}>
-                    <UserPlus className="w-4 h-4 mr-1" /> S'inscrire
-                  </Link>
-                </Button>
+                {isLoggedIn ? (
+                  <Button size="sm" className="bg-hero-gradient text-primary-foreground" asChild>
+                    <Link to="/dashboard" onClick={() => setMobileOpen(false)}>
+                      Mon Tableau de bord
+                    </Link>
+                  </Button>
+                ) : (
+                  <>
+                    <Button variant="outline" size="sm" asChild>
+                      <Link to="/signin" onClick={() => setMobileOpen(false)}>Se Connecter</Link>
+                    </Button>
+                    <Button size="sm" className="bg-hero-gradient text-primary-foreground" asChild>
+                      <Link to="/signup" onClick={() => setMobileOpen(false)}>
+                        <UserPlus className="w-4 h-4 mr-1" /> S'inscrire
+                      </Link>
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
           </motion.div>
